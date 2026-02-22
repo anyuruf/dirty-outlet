@@ -1,15 +1,25 @@
 import {
 	isRouteErrorResponse,
 	Links,
+	type LoaderFunctionArgs,
 	Meta,
 	Outlet,
 	Scripts,
 	ScrollRestoration,
+	useLoaderData, useRouteLoaderData,
 } from "react-router";
 import { TooltipProvider } from "~/components/ui/tooltip";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import clsx from "clsx";
+import type { ReactNode } from "react";
+import {
+	PreventFlashOnWrongTheme, type Theme,
+	ThemeProvider,
+	useTheme,
+} from "remix-themes";
+import { themeSessionResolver } from "~/lib/sessions.server";
 
 export const links: Route.LinksFunction = () => [
 	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -24,13 +34,42 @@ export const links: Route.LinksFunction = () => [
 	},
 ];
 
-export function Layout({ children }: { children: React.ReactNode }) {
+// Return the theme from the session storage using the loader
+export async function loader({ request }: LoaderFunctionArgs) {
+	const { getTheme } = await themeSessionResolver(request);
+	return {
+		theme: getTheme(),
+	};
+}
+
+export function Layout({ children }: { children: ReactNode }) {
+	const data = useRouteLoaderData<typeof loader>('root');
+
 	return (
-		<html lang="en">
+		<ThemeProvider
+			specifiedTheme={data?.theme as Theme}
+			themeAction="/resources/set-theme"
+		>
+			<InnerLayout ssrTheme={Boolean(data?.theme)}>{children}</InnerLayout>
+		</ThemeProvider>
+	);
+}
+
+export default function App() {
+	return <Outlet />;
+}
+
+
+export function InnerLayout({ ssrTheme, children }: { ssrTheme: boolean; children: ReactNode }) {
+	const [theme] = useTheme();
+
+	return (
+		<html lang="en" className={clsx(theme)}>
 			<head>
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
 				<Meta />
+				<PreventFlashOnWrongTheme ssrTheme={ssrTheme} />
 				<Links />
 			</head>
 			<body>
@@ -42,9 +81,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 	);
 }
 
-export default function App() {
-	return <Outlet />;
-}
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 	let message = "Oops!";
